@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projekt-Quiz – KI-Klub</title>
+<style>
+/* Alles Aussehen steckt in diesen Variablen. Zum Anpassen an die Website nur hier ändern. */
+.kq{
+  --kq-bg:#ffffff;
+  --kq-surface:#f4f5f8;
+  --kq-text:#1b1d28;
+  --kq-text-soft:#5b6072;
+  --kq-accent:#3b5bdb;
+  --kq-accent-text:#ffffff;
+  --kq-accent-soft:#e7ebfd;
+  --kq-border:#d6d9e3;
+  --kq-error:#b3261e;
+  --kq-radius:12px;
+  --kq-font:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --kq-max-width:640px;
+}
+.kq,.kq *{box-sizing:border-box}
+.kq{
+  max-width:var(--kq-max-width);margin:0 auto;padding:20px 16px 32px;
+  background:var(--kq-bg);color:var(--kq-text);font-family:var(--kq-font);line-height:1.5;font-size:1rem;
+}
+.kq h1,.kq h2,.kq h3{line-height:1.25;margin:0 0 .6em}
+.kq h1{font-size:1.6rem}
+.kq h2{font-size:1.3rem}
+.kq h3{font-size:1.05rem;margin-top:1.4em;text-wrap:balance}
+.kq h2{text-wrap:balance}
+.kq [tabindex="-1"]:focus{outline:none}
+.kq p{margin:0 0 1em}
+.kq .kq-soft{color:var(--kq-text-soft);font-size:.95rem}
+.kq .kq-progress{height:8px;background:var(--kq-surface);border-radius:99px;overflow:hidden;margin-bottom:6px}
+.kq .kq-progress>div{height:100%;width:0;background:var(--kq-accent);transition:width .25s}
+.kq .kq-step{font-size:.85rem;color:var(--kq-text-soft);margin-bottom:18px}
+.kq label.kq-field{display:block;font-weight:600;margin-bottom:6px}
+.kq input[type=text]{
+  width:100%;padding:12px 14px;font:inherit;color:inherit;background:var(--kq-bg);
+  border:1.5px solid var(--kq-border);border-radius:var(--kq-radius);
+}
+.kq input[type=text]:focus{outline:2px solid var(--kq-accent);outline-offset:1px}
+.kq .kq-error{color:var(--kq-error);font-size:.9rem;min-height:1.4em;margin:6px 0 0}
+.kq .kq-options{display:grid;gap:10px;margin:0 0 20px;padding:0;border:0}
+.kq .kq-option{
+  display:flex;gap:12px;align-items:flex-start;padding:12px 14px;cursor:pointer;
+  border:1.5px solid var(--kq-border);border-radius:var(--kq-radius);background:var(--kq-bg);
+}
+.kq .kq-option:hover{background:var(--kq-surface)}
+.kq .kq-option:has(input:checked){border-color:var(--kq-accent);background:var(--kq-accent-soft)}
+.kq .kq-option:has(input:focus-visible){outline:2px solid var(--kq-accent);outline-offset:1px}
+.kq .kq-option input{margin-top:.3em;accent-color:var(--kq-accent);flex:none}
+.kq .kq-option.kq-disabled{opacity:.5;cursor:not-allowed}
+.kq .kq-consent{display:flex;gap:10px;align-items:flex-start;margin:16px 0 0;font-size:.92rem}
+.kq .kq-consent input{margin-top:.3em;accent-color:var(--kq-accent);flex:none}
+.kq .kq-nav{display:flex;gap:10px;justify-content:space-between;margin-top:8px}
+.kq button{
+  font:inherit;font-weight:600;padding:12px 20px;border-radius:var(--kq-radius);cursor:pointer;
+  border:1.5px solid var(--kq-accent);background:var(--kq-accent);color:var(--kq-accent-text);
+}
+.kq button.kq-secondary{background:transparent;color:var(--kq-accent)}
+.kq button:disabled{opacity:.45;cursor:not-allowed}
+.kq button:focus-visible{outline:2px solid var(--kq-text);outline-offset:2px}
+.kq .kq-card{background:var(--kq-surface);border-radius:var(--kq-radius);padding:16px 18px;margin:0 0 16px}
+.kq .kq-card h3:first-child{margin-top:0}
+.kq .kq-status{font-size:.85rem;color:var(--kq-text-soft);margin-top:1.4em}
+.kq [hidden]{display:none!important}
+@media (max-width:480px){
+  .kq{padding:14px 12px 24px}
+  .kq h1{font-size:1.4rem}
+  .kq button{padding:12px 16px}
+}
+</style>
+</head>
+<body>
+
+<div id="ki-klub-quiz" class="kq" aria-live="polite"></div>
+
+<!-- ============================================================
+     Projekt- und Fragendaten (einzige Quelle). Gültiges JSON, keine Kommentare darin.
+     Felder je Projekt:
+       id, titel, status ("offen" = im Quiz; alles andere wird ausgeschlossen),
+       level (0, 0.5, 1, 2), zeit (1-3), themen[], stil [Haupt, Neben|null],
+       skills[] (python, prompting, api, ml), form (solo|klein|team),
+       abzug {hardware: Punkte}, ergebnis (ein Satz für die Alternative),
+       text (setzt "Du schaffst dieses Projekt, weil …" fort), erster_schritt
+     Platzhalter in text: {zeit} {thema} {ki} {kiAkk} {form} {formTeam}
+       ({ki} steht nach "mit" (Dativ), {kiAkk} nach "brauchen"/"mitbringen" (Akkusativ))
+     ============================================================ -->
+<script type="application/json" id="kq-data">
+{
+  "version": "v1",
+  "intro": "Kein Test, keine Noten, keine falschen Antworten. 9 kurze Fragen, dann bekommst du einen Projektvorschlag, den du wirklich schaffen kannst. Du kannst jederzeit etwas anderes wählen.",
+  "usernameHint": "Damit wir dich nach dem Quiz dem Projekt zuordnen können. Wird nur für die Klub-Orga gespeichert.",
+  "consentText": "Ich bin einverstanden, dass die Klub-Orga meinen GitHub-Username und meine Antworten speichert, um mich einem Projekt zuzuordnen. Sie liegen in der geschützten Klub-Ablage (Google Drive), nicht öffentlich. Wie du die Löschung verlangst, steht in der",
+  "datenschutzLink": { "text": "Datenschutzerklärung", "href": "https://ki-klub.pages.dev/datenschutz" },
+  "weiter": "So geht es weiter: Probier den ersten Schritt aus und komm mit deinem Ergebnis zum nächsten Klub-Termin (mittwochs). Dort sprechen wir über dein Projekt.",
+  "themen": {
+    "kreativ": "Kreatives & Design",
+    "daten": "Daten & Auswertung",
+    "technik": "Technik & Hardware",
+    "alltag": "Studium & Alltag",
+    "business": "Wirtschaft & Produkte",
+    "sprache": "Sprache & Chatbots",
+    "software": "KI-Werkzeuge & Software"
+  },
+  "platzhalter": {
+    "zeit": { "A": "etwa einer Stunde pro Woche", "B": "2–4 Stunden pro Woche", "C": "viel Zeit" },
+    "ki": { "A": "etwas Neugier auf KI", "B": "etwas Chatbot-Erfahrung", "C": "deiner Erfahrung mit KI per Code", "D": "deiner ML-Erfahrung" },
+    "kiAkk": { "A": "etwas Neugier auf KI", "B": "etwas Chatbot-Erfahrung", "C": "deine Erfahrung mit KI per Code", "D": "deine ML-Erfahrung" },
+    "form": { "A": "gern allein", "B": "gern zusammen", "C": "gern zusammen" },
+    "formTeam": { "A": "auch wenn du sonst lieber allein arbeitest", "B": "du arbeitest ja gern zusammen", "C": "du arbeitest ja gern zusammen" }
+  },
+  "fragen": [
+    { "key": "prog", "typ": "einzeln", "text": "Wie nah bist du am Programmieren dran?", "optionen": [
+      { "v": "A", "label": "Noch gar nicht, ich fange gerade erst an." },
+      { "v": "B", "label": "Ein bisschen: ich habe schon etwas geschrieben, schlage aber oft nach." },
+      { "v": "C", "label": "Ziemlich sicher: ich baue eigene Programme." } ] },
+    { "key": "python", "typ": "einzeln", "text": "Und Python?", "optionen": [
+      { "v": "A", "label": "Kenne ich noch nicht." },
+      { "v": "B", "label": "Grundlagen (Schleifen, Funktionen, kleine Skripte)." },
+      { "v": "C", "label": "Sicher, auch mit Bibliotheken." } ] },
+    { "key": "ki", "typ": "einzeln", "text": "Wie hast du bisher KI benutzt?", "optionen": [
+      { "v": "A", "label": "Kaum, ich bin einfach neugierig." },
+      { "v": "B", "label": "Chatbots oder Bildgeneratoren im Alltag." },
+      { "v": "C", "label": "Per Code/API eingebunden oder kleine Experimente gemacht." },
+      { "v": "D", "label": "Selbst Modelle trainiert oder einen ML-Kurs besucht." } ] },
+    { "key": "zeit", "typ": "einzeln", "text": "Wie viel Zeit hast du pro Woche?", "optionen": [
+      { "v": "A", "label": "Etwa eine Stunde oder weniger." },
+      { "v": "B", "label": "Etwa 2–4 Stunden." },
+      { "v": "C", "label": "Mehr als 4 Stunden, gern auch über viele Wochen." } ] },
+    { "key": "themen", "typ": "mehrfach", "max": 2, "hinweis": "Wähle bis zu 2.", "text": "Was interessiert dich am meisten?", "optionen": [
+      { "v": "kreativ", "label": "Kreatives & Design (Bilder, Entwürfe)" },
+      { "v": "daten", "label": "Daten & Auswertung" },
+      { "v": "technik", "label": "Technik & Hardware (Kamera, Sensoren, Bauteile)" },
+      { "v": "alltag", "label": "Studium & Alltag (Lernen, Campus, Mensa)" },
+      { "v": "business", "label": "Wirtschaft & Produkte (Ideen, Kunden, Märkte)" },
+      { "v": "sprache", "label": "Sprache & Chatbots" },
+      { "v": "software", "label": "KI-Werkzeuge testen & Software bauen" } ] },
+    { "key": "form", "typ": "einzeln", "text": "Wie arbeitest du am liebsten?", "optionen": [
+      { "v": "A", "label": "Eher für mich, in meinem Tempo." },
+      { "v": "B", "label": "Zu zweit oder in einer kleinen Gruppe." },
+      { "v": "C", "label": "In einem größeren Team." } ] },
+    { "key": "stil", "typ": "einzeln", "text": "Was macht dir am meisten Spaß?", "optionen": [
+      { "v": "A", "label": "Etwas Lauffähiges bauen." },
+      { "v": "B", "label": "Etwas untersuchen, testen und vergleichen." },
+      { "v": "C", "label": "Ausprobieren und gestalten." } ] },
+    { "key": "gefuehl", "typ": "einzeln", "text": "Wie darf sich dein erstes Projekt anfühlen?", "optionen": [
+      { "v": "A", "label": "Sicher machbar, ich will ein Erfolgserlebnis." },
+      { "v": "B", "label": "Ein bisschen Stretch, aber mit Netz." },
+      { "v": "C", "label": "Fordernd, ich will mich ausprobieren." } ] },
+    { "key": "zugang", "typ": "mehrfach", "hinweis": "Mehrfachauswahl.", "text": "Was hast du schon?", "optionen": [
+      { "v": "abo", "label": "Ein bezahltes KI-Abo" },
+      { "v": "hardware", "label": "Raspberry Pi / Arduino / Sensoren" },
+      { "v": "nichts", "exklusiv": true, "label": "Nichts davon. Das reicht völlig, viele Projekte laufen kostenlos." } ] }
+  ],
+  "stilZuordnung": { "A": "bauen", "B": "untersuchen", "C": "ausprobieren" },
+  "projekte": [
+    { "id": "kampagnenmotiv-bildgenerierung", "titel": "Kampagnenmotiv per Bild-KI", "status": "offen",
+      "level": 0, "zeit": 1, "themen": ["kreativ"], "stil": ["ausprobieren", null], "skills": ["prompting"], "form": "solo",
+      "ergebnis": "ein finales Bildmotiv samt Zwischenschritten, die zeigen, wie sich dein Prompt entwickelt hat",
+      "text": "du dafür keinen Code brauchst. Neugier und Lust zum Formulieren reichen, und mit {zeit} ist ein Abend locker drin. Wenn dich {thema} reizt, hast du hier freie Hand; jeder Zwischenschritt zählt als Ergebnis, du kannst also nicht scheitern.",
+      "erster_schritt": "Thema und drei Stichworte festlegen, bevor du den ersten Prompt schreibst." },
+    { "id": "marktanalyse-onepager", "titel": "Marktanalyse-Onepager", "status": "offen",
+      "level": 0, "zeit": 1, "themen": ["business"], "stil": ["untersuchen", null], "skills": ["prompting"], "form": "solo",
+      "ergebnis": "ein Onepager, der die Geschäftsidee in zwei Minuten erklärt",
+      "text": "du eine Geschäftsidee selbst wählst und die KI nur recherchiert. Das Ziel ist ein Onepager, den du in zwei Minuten erklären kannst. Dafür brauchst du höchstens {kiAkk}, nicht mehr.",
+      "erster_schritt": "Drei Sätze zur eigenen Idee aufschreiben." },
+    { "id": "no-code-automatisierung", "titel": "No-Code-Workflow mit KI-Baustein", "status": "offen",
+      "level": 0, "zeit": 1, "themen": ["business", "software"], "stil": ["bauen", null], "skills": ["prompting"], "form": "solo",
+      "ergebnis": "ein Workflow, der live Eingaben automatisch einsortiert",
+      "text": "ein No-Code-Werkzeug dir die Technik abnimmt und du nur den Ablauf denkst. Mit der kostenlosen Stufe läuft ein vorführbarer Workflow an einem Abend, auch mit {zeit}.",
+      "erster_schritt": "Einen nervigen Handgriff aus dem Alltag aufschreiben, der sich automatisieren ließe." },
+    { "id": "qualitaetskontrolle-bilderkennung", "titel": "Bilderkennung Gut/Schlecht (Teachable Machine)", "status": "offen",
+      "level": 0, "zeit": 1, "themen": ["technik"], "stil": ["ausprobieren", "untersuchen"], "skills": ["ml"], "form": "solo",
+      "ergebnis": "ein Modell, das live ein neues Foto richtig einordnet",
+      "text": "du ein Smartphone und 20–30 Fotos brauchst, mehr nicht. Teachable Machine läuft im Browser, ganz ohne Code und Abo. Wenn das Modell mal danebenliegt, gehört das zur Lektion.",
+      "erster_schritt": "20–30 Fotos in „gut“ und „schlecht“ sortieren." },
+    { "id": "cad-skizzen-ki", "titel": "KI-Entwurfsskizzen für ein Bauteil", "status": "offen",
+      "level": 0.5, "zeit": 1, "themen": ["technik"], "stil": ["untersuchen", null], "skills": ["prompting"], "form": "solo",
+      "ergebnis": "eine kleine Bildergalerie mit Kommentar, welcher Entwurf sich real bauen ließe und welcher nicht",
+      "text": "du für ein einfaches Bauteil aus dem Alltag nur Interesse an Konstruktion mitbringen musst. Unbaubare Entwürfe herauszusortieren ist kein Fehlschlag, sondern der lehrreiche Teil. Mit {zeit} schaffst du eine kleine Galerie mit Kommentar.",
+      "erster_schritt": "Ein reales, einfaches Bauteil als Vorbild aussuchen." },
+    { "id": "muelltrennungs-assistent", "titel": "Mülltrennungs-Assistent (Foto → Tonne)", "status": "offen",
+      "level": 0.5, "zeit": 1, "themen": ["alltag"], "stil": ["bauen", null], "skills": ["prompting"], "form": "solo",
+      "ergebnis": "ein Prototyp, der zu einem Foto die richtige Tonne nennt und Grenzfälle begründet",
+      "text": "ein multimodales Chat-Modell die Erkennung schon übernimmt und du nur Grenzfälle sammelst und prüfst. Das hilft Leuten, die neu in Deutschland sind, und gelingt auch mit {ki}.",
+      "erster_schritt": "10–15 Grenzfall-Fotos sammeln und die richtige Tonne von Hand dazuschreiben." },
+    { "id": "lerntool-campus", "titel": "Lerntool für den Campus (MVP)", "status": "offen",
+      "level": 0, "zeit": 3, "themen": ["alltag"], "stil": ["bauen", null], "skills": ["prompting"], "form": "team",
+      "ergebnis": "ein MVP, den jemand am Campus in einer echten Lernsituation benutzen kann",
+      "text": "du hier nicht allein bist: Die erste Sitzung sammelt nur Ideen, danach teilt sich die Arbeit in Gruppen auf. Du baust zusammen mit anderen etwas für den echten Campus ({formTeam}), und es zählt nicht als Kurs oder Prüfung. Aktives Mitarbeiten braucht ein bezahltes KI-Abo (Klubbeschluss vom 07.09.2026), und falls du keines hast, sprich uns vorher an.",
+      "erster_schritt": "Am ersten Klub-Termin sammeln, was in ein Lerntool für den Campus gehört." },
+    { "id": "datenauswertung-dashboard", "titel": "Datenauswertung mit KI", "status": "offen",
+      "level": 1, "zeit": 1, "themen": ["daten"], "stil": ["untersuchen", null], "skills": ["prompting"], "form": "klein",
+      "ergebnis": "zwei bis drei aussagekräftige Diagramme mit je einer Kernaussage",
+      "text": "du nur eine Tabelle mit 50 Zeilen brauchst und die KI die Diagramme baut. Du entscheidest, ob die Kernaussage stimmt, und das ist die eigentliche Arbeit.",
+      "erster_schritt": "Einen Datensatz mit mindestens 50 Zeilen aussuchen." },
+    { "id": "browser-zusammenfasser", "titel": "Browser-Erweiterung", "status": "offen",
+      "level": 1, "zeit": 1, "themen": ["software", "sprache"], "stil": ["bauen", null], "skills": ["api"], "form": "solo",
+      "ergebnis": "eine Browser-Erweiterung, die sich live auf einer beliebigen Webseite vorführen lässt",
+      "text": "du mit Grundlagen in HTML/JavaScript und {zeit} an ein bis zwei Abenden schon etwas Vorführbares hast. Die „Hello World“-Anleitungen für Browser-Erweiterungen führen dich durch die Technik.",
+      "erster_schritt": "Eine offizielle „Hello World“-Erweiterung einmal durchgehen." },
+    { "id": "ideen-versteigerung-mit-zeit", "titel": "Zeit-Auktion als Web-Tool", "status": "offen",
+      "level": 1, "zeit": 1, "themen": ["business", "software"], "stil": ["bauen", null], "skills": ["python"], "form": "klein",
+      "ergebnis": "ein lauffähiges Tool, in dem Mitglieder Zeitbudgets auf Projekte, Termine und Rollen bieten",
+      "text": "ein Spreadsheet mit Makros als Startpunkt reicht und du es nicht gleich als große Web-App bauen musst. Bei diesem Mini-Projekt kannst du {form} loslegen.",
+      "erster_schritt": "Prüfen, ob ein bestehendes Tool sich per Skript um die Zeitgebots-Logik erweitern lässt." },
+    { "id": "mensa-naehrwert-empfehlung", "titel": "Mensa-Empfehlung 12:15 Uhr", "status": "offen",
+      "level": 1, "zeit": 1, "themen": ["alltag", "daten"], "stil": ["bauen", null], "skills": ["python"], "form": "solo",
+      "ergebnis": "ein kleines Tool, das aus dem Speiseplan rechtzeitig eine Mittagsempfehlung macht",
+      "text": "du mit Python-Grundlagen aus einer Speisekarte ein kleines Tool machst, das du morgen selbst benutzt. Dein Interesse an {thema} wird hier ganz konkret: ein Skript, ein Ergebnis, ein Mittagessen.",
+      "erster_schritt": "Prüfen, ob das Studierendenwerk eine API für Speisepläne anbietet." },
+    { "id": "technische-abschaetzung-pruefstand", "titel": "KI-Rechnung gegen Handrechnung", "status": "offen",
+      "level": 1, "zeit": 1, "themen": ["technik"], "stil": ["untersuchen", null], "skills": ["prompting"], "form": "solo",
+      "ergebnis": "ein Vergleichsprotokoll, wo die KI danebenlag und wo sie stimmte",
+      "text": "du dein Fachwissen schon hast und die KI nur dein Prüfling ist. Du rechnest selbst nach und brauchst keinen Code. Wo die KI danebenliegt, ist das Ergebnis.",
+      "erster_schritt": "Eine Übungsaufgabe mit bekannter Lösung heraussuchen." },
+    { "id": "agenten-benchmark", "titel": "KI-Coding-Tools vergleichen", "status": "offen",
+      "level": 1, "zeit": 2, "themen": ["software"], "stil": ["untersuchen", null], "skills": ["prompting"], "form": "klein",
+      "ergebnis": "ein kurzer Vergleich, welches KI-Coding-Werkzeug wofür taugt",
+      "text": "du deine Aufgaben selbst klein hältst und mit Programmiergrundlagen und {zeit} ein ehrliches Urteil bekommst. Niemand erwartet perfekten Code; wichtiger ist, dass du nüchtern vergleichst.",
+      "erster_schritt": "Eine sehr kleine, klar abgegrenzte Programmieraufgabe wählen, zum Beispiel Dateien nach Größe sortieren." },
+    { "id": "kundenservice-bot-prototyp", "titel": "FAQ-Chatbot", "status": "offen",
+      "level": 1, "zeit": 2, "themen": ["business", "sprache"], "stil": ["bauen", null], "skills": ["api"], "form": "klein",
+      "ergebnis": "ein Chatfenster, das drei Testfragen zuverlässig richtig beantwortet",
+      "text": "du den Chatbot entweder mit Python oder mit einem No-Code-Baukasten bauen kannst und nur eine FAQ-Liste brauchst. Mit {ki} und {zeit} laufen drei Testfragen zuverlässig.",
+      "erster_schritt": "Eine FAQ-Liste mit 10–15 Fragen schreiben." },
+    { "id": "rag-notizen-chatbot", "titel": "RAG-Chatbot über eigene Notizen", "status": "offen",
+      "level": 1, "zeit": 2, "themen": ["sprache", "alltag"], "stil": ["bauen", null], "skills": ["python", "api"], "form": "klein",
+      "ergebnis": "ein Chatbot, der Fragen zu deinen Notizen beantwortet und die Quelldatei nennt",
+      "text": "du {kiAkk} und Python-Grundlagen schon mitbringst und eigene Notizen als Material hast. Kostenlose Modelle reichen, und kleine Textstücke zum Start sind völlig okay.",
+      "erster_schritt": "5–10 eigene Textdateien sammeln." },
+    { "id": "memory-system-fuer-ki", "titel": "Gedächtnis für eine KI", "status": "offen",
+      "level": 1, "zeit": 2, "themen": ["software", "sprache"], "stil": ["bauen", "untersuchen"], "skills": ["api"], "form": "klein",
+      "ergebnis": "ein Memory-System, das Gesprächsinhalte speichert und in einem neuen Gespräch wieder abruft",
+      "text": "du mit einer KI schon gesprochen hast und die Lücke selbst erlebst: Nach dem Chat weiß sie nichts mehr. Das Projekt beginnt mit einem Gespräch und wächst mit {zeit}.",
+      "erster_schritt": "Der KI 3–5 Vorlieben nennen, ein neues Gespräch starten und prüfen, was sie noch weiß." },
+    { "id": "handgesten-3d-steuerung", "titel": "Handgesten steuern 3D-Objekt", "status": "offen",
+      "level": 1, "zeit": 2, "themen": ["technik", "software"], "stil": ["bauen", null], "skills": ["python", "ml"], "form": "klein",
+      "ergebnis": "ein Live-Programm, in dem sich ein 3D-Objekt mit deiner Handbewegung dreht",
+      "text": "ein vortrainiertes Modell die schwere Arbeit übernimmt und du nur Python-Grundlagen und eine Webcam brauchst. Das Ergebnis siehst du sofort live: Dreh die Hand, es dreht sich das Objekt.",
+      "erster_schritt": "Ein Testskript, das nur Handposition und -drehung ausgibt." },
+    { "id": "sensor-ki-klassifikation", "titel": "Edge-AI mit Pi/Arduino", "status": "offen",
+      "level": 2, "zeit": 2, "themen": ["technik"], "stil": ["bauen", null], "skills": ["python", "ml"], "form": "klein",
+      "abzug": { "hardware": 3 },
+      "ergebnis": "ein physischer Aufbau, der live auf Veränderungen reagiert",
+      "text": "du Python/C++ sicher beherrschst und dich {thema} wirklich packt. Die Modelle laufen lokal, du brauchst kein Abo, und am Ende läuft etwas Physisches, das du vorführen kannst. Die Hardware klären wir zuerst, damit die Software nicht blockiert.",
+      "erster_schritt": "Klären, welche Hardware im Klub oder privat verfügbar ist." },
+    { "id": "transkription-saas", "titel": "Verteilte Meeting-Transkription", "status": "offen",
+      "level": 2, "zeit": 3, "themen": ["sprache", "business"], "stil": ["bauen", null], "skills": ["python", "api", "ml"], "form": "team",
+      "ergebnis": "ein Prototyp, der ein Gespräch über zwei Geräte aufnimmt und mit Sprecherzuordnung transkribiert",
+      "text": "du mit solidem Programmierwissen im Team ein großes, ehrliches Stück bauen willst ({formTeam}). Der Kern ist ein Prototyp mit zwei Geräten; die Ausbaustufen sind optional. Du musst nicht alles allein schaffen.",
+      "erster_schritt": "Zwei Handys nehmen dasselbe Gespräch auf, dann die Spuren von Hand synchronisieren." },
+    { "id": "anwesenheits-streak", "titel": "Anwesenheits-Streak", "status": "offen",
+      "level": 1, "zeit": 2, "themen": ["daten", "software"], "stil": ["bauen", "ausprobieren"], "skills": [], "form": "klein",
+      "ergebnis": "ein vorführbarer Prototyp mit erfundenen Beispieldaten, der die Streak anzeigt und den Ferien-Test besteht",
+      "text": "du für die kleine Web-Oberfläche die Sprache frei wählen kannst und nur mit erfundenen Beispieldaten arbeitest. Der Abnahmetest ist klar: Eine Woche ohne Termin darf keine Streak zerstören.",
+      "erster_schritt": "Auf Papier die Streak für zehn erfundene Personen und zwölf Wochen aufzeichnen, inklusive zwei Ferienwochen." },
+    { "id": "ki-klub-app", "titel": "KI-Klub-App", "status": "offen",
+      "level": 2, "zeit": 3, "themen": ["software"], "stil": ["bauen", null], "skills": [], "form": "team",
+      "ergebnis": "ein Prototyp mit Start-Bildschirm, mindestens drei Bausteinen und einer dokumentierten Erweiterungsstelle",
+      "text": "du mit Web- oder Mobil-Entwicklung und einer Datenbank Erfahrung hast und im Team ein Gerüst baust, in das sich spätere Klub-Ideen als Bausteine einhängen lassen ({formTeam}). Der Prototyp läuft mit erfundenen Personen, und mit dem Gerüst und einem einzigen Baustein anzufangen genügt.",
+      "erster_schritt": "Die Bausteine als Kästchen auf Papier zeichnen und für jeden aufschreiben, welche Daten er braucht und welche er liefert." },
+    { "id": "lernbegleiter-semester", "titel": "Lernbegleiter fürs Semester", "status": "vergeben",
+      "level": 0, "zeit": 1, "themen": ["alltag"], "stil": ["bauen", null], "skills": ["prompting"], "form": "solo",
+      "ergebnis": "ein Setup, das Stoff, Termine und Lernplan fürs Semester zusammenhält",
+      "text": "du dafür keinen Code brauchst.",
+      "erster_schritt": "—" }
+  ]
+}
+</script>
+
+<script>
+/* ---------- Einstellungen ---------- */
+// URL, an die das Ergebnis per POST (JSON) geschickt wird. Leer = nur localStorage + console.log.
+var RESULTS_ENDPOINT = "";
+// Apps Script und ähnliche Dienste erlauben keinen CORS-Preflight; text/plain vermeidet ihn.
+// Der Body ist trotzdem JSON. Mit mode "no-cors" (siehe sendRecord) sind nur solche einfachen Typen erlaubt.
+var RESULTS_CONTENT_TYPE = "text/plain;charset=utf-8";
+var LOCAL_STORAGE_KEY = "kiKlubQuizResults";
+
+/* kq:scoring:start — reine Logik ohne DOM; pruefe-wertung.js lädt genau diesen Block */
+var kqScoring = (function () {
+  var PROMPTING = { B: 1, C: 1, D: 1 };
+  var API = { C: 2, D: 1 };
+  var ML = { D: 2 };
+  var PYTHON = { A: 0, B: 1, C: 2 };
+  var FORM = {
+    A: { solo: 2, klein: 1, team: 0 },
+    B: { solo: 1, klein: 2, team: 1 },
+    C: { solo: 0, klein: 1, team: 2 }
+  };
+  var STUFE = { A: 0, B: 1, C: 2 };
+  var MAXZEIT = { A: 1, B: 2, C: 3 };
+
+  function score(data, a) {
+    var S = STUFE[a.prog], maxT = MAXZEIT[a.zeit], t = Math.max(S, 0.5);
+    var stil = data.stilZuordnung[a.stil];
+    var zugang = a.zugang || [];
+    var rows = [];
+    data.projekte.forEach(function (p) {
+      if (p.status !== "offen" || p.level > S + 0.5 || p.zeit > maxT) return;
+      // Python-Projekte setzen mindestens Grundlagen voraus: harter Filter statt Punktabzug
+      if (p.skills.indexOf("python") >= 0 && a.python === "A") return;
+      var treffer = p.themen.filter(function (x) { return a.themen.indexOf(x) >= 0; }).length;
+      var themePts = 3 * treffer, pts = themePts;
+      pts += p.stil[0] === stil ? 2 : (p.stil[1] === stil ? 1 : 0);
+      p.skills.forEach(function (s) {
+        if (s === "python") pts += PYTHON[a.python];
+        if (s === "prompting") pts += PROMPTING[a.ki] || 0;
+        if (s === "api") pts += API[a.ki] || 0;
+        if (s === "ml") pts += ML[a.ki] || 0;
+      });
+      if (p.zeit === maxT) pts += 1;
+      if (a.gefuehl === "A" && p.level < t) pts += 2;
+      if (a.gefuehl === "C" && p.level >= t) pts += 2;
+      pts += FORM[a.form][p.form];
+      if (p.abzug && p.abzug.hardware && zugang.indexOf("hardware") < 0) pts -= p.abzug.hardware;
+      rows.push({ id: p.id, pts: pts, themePts: themePts, zeit: p.zeit });
+    });
+    rows.sort(function (x, y) {
+      return (y.pts - x.pts) || (y.themePts - x.themePts) || (x.zeit - y.zeit) ||
+        (x.id < y.id ? -1 : x.id > y.id ? 1 : 0);
+    });
+    var scores = {};
+    rows.forEach(function (r) { scores[r.id] = r.pts; });
+    var first = rows[0] || null, second = rows[1] || null;
+    return {
+      stufe_S: S,
+      max_zeitstufe: maxT,
+      scores: scores,
+      recommended: first ? first.id : null,
+      // Alternative nur, wenn sie höchstens 4 Punkte hinter Platz 1 liegt
+      runner_up: first && second && second.pts >= first.pts - 4 ? second.id : null
+    };
+  }
+  return { score: score };
+})();
+/* kq:scoring:end */
+
+/* ---------- Oberfläche ---------- */
+(function () {
+  var DATA = JSON.parse(document.getElementById("kq-data").textContent);
+  var root = document.getElementById("ki-klub-quiz");
+  var state = { screen: "start", index: 0, username: "", consent: false, answers: {}, result: null, record: null, sendStatus: "" };
+
+  function el(tag, attrs, children) {
+    var e = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === "text") e.textContent = attrs[k];
+      else if (k === "class") e.className = attrs[k];
+      else e.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) { if (c) e.appendChild(c); });
+    return e;
+  }
+  function render(node) {
+    root.innerHTML = ""; root.appendChild(node);
+    // Fokus auf die Überschrift (bei Fragen: die Frage), damit der Fokus nach "Weiter" nicht auf body fällt
+    var h = root.querySelector("h1,h2,legend");
+    if (h) { h.setAttribute("tabindex", "-1"); h.focus(); }
+  }
+
+  var USERNAME_RE = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
+
+  function showStart() {
+    state.screen = "start";
+    var input = el("input", { type: "text", id: "kq-user", autocomplete: "username", autocapitalize: "none", spellcheck: "false", maxlength: "40", placeholder: "z. B. octocat" });
+    input.value = state.username;
+    var cons = el("input", { type: "checkbox", id: "kq-consent" });
+    cons.checked = state.consent;
+    var err = el("p", { class: "kq-error", role: "alert" });
+    var btn = el("button", { type: "button", text: "Los geht’s" });
+    function go() {
+      var u = input.value.trim().replace(/^@/, "");
+      if (!USERNAME_RE.test(u)) { err.textContent = "Bitte gib deinen GitHub-Username ein (Buchstaben, Ziffern, Bindestriche, höchstens 39 Zeichen)."; input.focus(); return; }
+      if (!cons.checked) { err.textContent = "Bitte stimme der Speicherung zu, sonst können wir dich nicht zuordnen."; return; }
+      state.username = u; state.consent = true; state.index = 0; showQuestion();
+    }
+    btn.addEventListener("click", go);
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+    render(el("div", {}, [
+      el("h1", { text: "Welches Projekt passt zu dir?" }),
+      el("p", { text: DATA.intro }),
+      el("label", { class: "kq-field", for: "kq-user", text: "Dein GitHub-Username" }),
+      input,
+      el("p", { class: "kq-soft", text: DATA.usernameHint }),
+      el("label", { class: "kq-consent" }, [cons, el("span", {}, [
+        document.createTextNode(DATA.consentText + " "),
+        el("a", { href: DATA.datenschutzLink.href, target: "_blank", rel: "noopener", text: DATA.datenschutzLink.text }),
+        document.createTextNode(".")
+      ])]),
+      err,
+      el("div", { class: "kq-nav" }, [el("span"), btn])
+    ]));
+    input.focus();
+  }
+
+  function showQuestion() {
+    state.screen = "question";
+    var q = DATA.fragen[state.index], n = DATA.fragen.length;
+    var multi = q.typ === "mehrfach";
+    var cur = state.answers[q.key] || (multi ? [] : null);
+    var next = el("button", { type: "button", text: state.index === n - 1 ? "Fertig" : "Weiter" });
+    var inputs = [];
+    function sync() {
+      var sel = inputs.filter(function (i) { return i.checked; }).map(function (i) { return i.value; });
+      state.answers[q.key] = multi ? sel : sel[0] || null;
+      // Frage 5: mindestens 1, höchstens max; Frage 9: Mehrfachauswahl mit exklusivem "Nichts davon"
+      var ok = sel.length > 0;
+      if (q.max) inputs.forEach(function (i) {
+        var off = !i.checked && sel.length >= q.max;
+        i.disabled = off; i.parentNode.classList.toggle("kq-disabled", off);
+      });
+      next.disabled = !ok;
+    }
+    var opts = q.optionen.map(function (o) {
+      var i = el("input", { type: multi ? "checkbox" : "radio", name: "kq-" + q.key, value: o.v });
+      i.checked = multi ? cur.indexOf(o.v) >= 0 : cur === o.v;
+      i.addEventListener("change", function () {
+        if (multi && i.checked && q.optionen.some(function (x) { return x.exklusiv; })) {
+          // exklusive Option schließt die anderen aus und umgekehrt
+          inputs.forEach(function (other, idx) {
+            var excl = q.optionen[idx].exklusiv;
+            if (other !== i && (o.exklusiv || excl)) other.checked = false;
+          });
+        }
+        sync();
+      });
+      inputs.push(i);
+      return el("label", { class: "kq-option" }, [i, el("span", { text: o.label })]);
+    });
+    var back = el("button", { type: "button", class: "kq-secondary", text: "Zurück" });
+    back.addEventListener("click", function () { if (state.index === 0) showStart(); else { state.index--; showQuestion(); } });
+    next.addEventListener("click", function () { if (state.index === n - 1) finish(); else { state.index++; showQuestion(); } });
+
+    var pct = Math.round((state.index / n) * 100);
+    var bar = el("div", { class: "kq-progress", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(n), "aria-valuenow": String(state.index) }, [el("div")]);
+    bar.firstChild.style.width = pct + "%";
+    var legend = el("legend", { text: (state.index + 1) + ". " + q.text });
+    legend.style.cssText = "font-size:1.25rem;font-weight:700;line-height:1.3;margin-bottom:6px;padding:0";
+    render(el("div", {}, [
+      bar,
+      el("div", { class: "kq-step", text: "Frage " + (state.index + 1) + " von " + n }),
+      el("fieldset", { class: "kq-options" }, [legend, q.hinweis ? el("span", { class: "kq-soft", text: q.hinweis }) : null].concat(opts)),
+      el("div", { class: "kq-nav" }, [back, next])
+    ]));
+    sync();
+  }
+
+  /* ---------- Abschluss ---------- */
+  function isoLocal(d) {
+    function p(x) { return (x < 10 ? "0" : "") + x; }
+    var off = -d.getTimezoneOffset(), sign = off >= 0 ? "+" : "-"; off = Math.abs(off);
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()) +
+      sign + p(Math.floor(off / 60)) + ":" + p(off % 60);
+  }
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      var r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16);
+    });
+  }
+  function sendRecord(rec) {
+    try {
+      if (!RESULTS_ENDPOINT) {
+        console.log("[KI-Klub-Quiz] Ergebnis (kein RESULTS_ENDPOINT gesetzt):", rec);
+        var list = [];
+        try { list = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]"); } catch (e) { list = []; }
+        list.push(rec);
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(list));
+        return Promise.resolve("lokal");
+      }
+      // no-cors: Die Antwort ist "opaque", Status und Inhalt sind nicht lesbar. Das Promise gelingt, sobald die
+      // Anfrage rausgegangen ist; es scheitert nur bei Netzwerkfehlern. Ob der Server sie angenommen hat, weiß der Browser nicht.
+      return fetch(RESULTS_ENDPOINT, { method: "POST", mode: "no-cors", headers: { "Content-Type": RESULTS_CONTENT_TYPE }, body: JSON.stringify(rec) })
+        .then(function () { return "gesendet"; })
+        .catch(function (e) {
+          console.warn("[KI-Klub-Quiz] Senden fehlgeschlagen, Ergebnis bleibt lokal:", e);
+          try {
+            var l = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]"); l.push(rec);
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(l));
+          } catch (e2) { /* localStorage gesperrt – egal */ }
+          return "fehler";
+        });
+    } catch (e) {
+      console.warn("[KI-Klub-Quiz] Speichern fehlgeschlagen:", e);
+      return Promise.resolve("fehler");
+    }
+  }
+
+  function finish() {
+    var a = state.answers;
+    var input = {
+      prog: a.prog, python: a.python, ki: a.ki, zeit: a.zeit, themen: a.themen || [],
+      form: a.form, stil: a.stil, gefuehl: a.gefuehl,
+      zugang: (a.zugang || []).filter(function (x) { return x !== "nichts"; })
+    };
+    var res = kqScoring.score(DATA, input);
+    state.result = res;
+    state.record = {
+      id: uuid(), timestamp: isoLocal(new Date()), github_username: state.username, quiz_version: DATA.version,
+      answers: input, stufe_S: res.stufe_S, max_zeitstufe: res.max_zeitstufe,
+      scores: res.scores, recommended: res.recommended, runner_up: res.runner_up, consent: state.consent
+    };
+    showThanks();
+    sendRecord(state.record).then(function (s) {
+      state.sendStatus = s;
+      var node = document.getElementById("kq-status");
+      if (node) node.textContent = statusText();
+    });
+  }
+  function statusText() {
+    if (state.sendStatus === "gesendet") return "Deine Antworten wurden an die Klub-Orga abgeschickt. Eine Bestätigung der Annahme kann diese Seite nicht abrufen.";
+    if (state.sendStatus === "lokal") return "Deine Antworten sind in diesem Browser gespeichert.";
+    if (state.sendStatus === "fehler") return "Die Antworten konnten nicht abgeschickt werden und sind nur in diesem Browser gespeichert. Dein Ergebnis siehst du trotzdem; sag der Klub-Orga bitte kurz Bescheid.";
+    return "";
+  }
+
+  function showThanks() {
+    state.screen = "thanks";
+    var btn = el("button", { type: "button", text: "Mein Ergebnis anzeigen" });
+    btn.addEventListener("click", showResult);
+    var pb = el("div", { class: "kq-progress", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "9", "aria-valuenow": "9" }, [el("div")]);
+    pb.firstChild.style.width = "100%";
+    render(el("div", {}, [
+      pb,
+      el("h1", { text: "Danke!" }),
+      el("p", { text: "Du hast alle Fragen beantwortet. Wenn du bereit bist, zeigen wir dir, welches Projekt zu dir passt." }),
+      el("div", { class: "kq-nav" }, [el("span"), btn]),
+      el("p", { class: "kq-status", id: "kq-status", text: statusText() })
+    ]));
+  }
+
+  function fill(p, text) {
+    var a = state.answers;
+    var sel = a.themen || [];
+    var match = sel.filter(function (t) { return p.themen.indexOf(t) >= 0; })[0] || p.themen[0];
+    var map = {
+      zeit: DATA.platzhalter.zeit[a.zeit], thema: DATA.themen[match],
+      ki: DATA.platzhalter.ki[a.ki], kiAkk: DATA.platzhalter.kiAkk[a.ki], form: DATA.platzhalter.form[a.form], formTeam: DATA.platzhalter.formTeam[a.form]
+    };
+    return text.replace(/\{(\w+)\}/g, function (m, k) { return map[k] != null ? map[k] : m; });
+  }
+  function byId(id) { return DATA.projekte.filter(function (p) { return p.id === id; })[0]; }
+
+  function showResult() {
+    state.screen = "result";
+    var p = byId(state.result.recommended);
+    var parts = [
+      el("h2", {}, [el("strong", { text: p.titel }), document.createTextNode(" passt zu dir.")]),
+      el("div", { class: "kq-card" }, [
+        el("h3", { text: "Du schaffst dieses Projekt, weil …" }),
+        el("p", { text: fill(p, p.text) })
+      ]),
+      el("div", { class: "kq-card" }, [
+        el("h3", { text: "Erster Schritt" }),
+        el("p", { text: fill(p, p.erster_schritt) })
+      ])
+    ];
+    if (state.result.runner_up) {
+      var r = byId(state.result.runner_up);
+      parts.push(el("p", {}, [
+        document.createTextNode("Falls dir das nicht gefällt: "),
+        el("strong", { text: r.titel }),
+        document.createTextNode(", " + r.ergebnis + ".")
+      ]));
+    }
+    parts.push(el("p", { text: DATA.weiter }));
+    parts.push(el("p", { class: "kq-soft", text: "Das ist ein Vorschlag, kein Muss. Du kannst jederzeit etwas anderes wählen." }));
+    render(el("div", {}, parts));
+  }
+
+  showStart();
+})();
+</script>
+</body>
+</html>
